@@ -308,11 +308,12 @@ class ImageCanvas(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(640, 480)
 
-    def set_image(self, image_rgb, major_minor, corrections):
+    def set_image(self, image_rgb, major_minor, corrections, refit=False):
         self._pixmap = numpy_to_pixmap(image_rgb)
         self.major_minor_points = major_minor
         self.correction_points = corrections
-        self.fit()
+        if refit:
+            self.fit()
         self.update()
 
     def set_scene(self, major_minor, corrections):
@@ -406,6 +407,7 @@ class ImageCanvas(QWidget):
         painter.restore()
 
         pen = QPen()
+        origin = self._image_origin()
         pen.setWidthF(max(1.0, LINE_WIDTH * min(1.0, self._zoom)))
         pts = self.major_minor_points
         if len(pts) >= 2:
@@ -424,10 +426,13 @@ class ImageCanvas(QWidget):
             ):
                 if len(pair) == 2:
                     pen.setColor(QColor_from_rgb(color))
+                    pen.setStyle(style)
                     painter.setPen(pen)
-                    painter.drawLine(
-                        int(pair[0][0]), int(pair[0][1]), int(pair[1][0]), int(pair[1][1])
-                    )
+                    x1 = origin.x() + pair[0][0] * self._zoom
+                    y1 = origin.y() + pair[0][1] * self._zoom
+                    x2 = origin.x() + pair[1][0] * self._zoom
+                    y2 = origin.y() + pair[1][1] * self._zoom
+                    painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
         for idx, (x, y) in enumerate(pts):
             color = MINOR_COLOR
             if len(pts) == 4:
@@ -695,13 +700,14 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.status.showMessage(f"S4M failed: {message}")
 
-    def refresh_overlay(self):
+    def refresh_overlay(self, refit=False):
         if self.image_rgb is None:
             return
         self.canvas.set_image(
             OverlayComposer.compose(self.image_rgb, self.mask),
             self.major_minor_points,
             self.correction_points,
+            refit=refit,
         )
         self.canvas.set_scene(self.major_minor_points, self.correction_points)
 
@@ -766,7 +772,7 @@ class MainWindow(QMainWindow):
         self.major_minor_points = []
         self.correction_points = []
         self.mask = None
-        self.refresh_overlay()
+        self.refresh_overlay(refit=True)
         self.status.showMessage(
             f"Loaded {path.name} ({image_data['ori_shape'][1]}x"
             f"{image_data['ori_shape'][0]}). Click four major/minor points."
